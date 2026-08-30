@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { logout } from "@/lib/auth-actions";
+import { isAuthEnabled } from "@/lib/auth";
 import { getBusiness } from "@/lib/queries";
 
 const NAV = [
@@ -12,14 +14,14 @@ const NAV = [
   { href: "/settings", label: "Business", key: "settings" },
 ];
 
-export function AppShell({
+export async function AppShell({
   children,
   current,
 }: {
   children: React.ReactNode;
   current: string;
 }) {
-  const business = getBusiness();
+  const business = await getBusiness();
   const visible = NAV.filter((item) => {
     if (item.key === "cash") return business.modules.cash;
     if (item.key === "customers") return business.modules.customers;
@@ -47,6 +49,13 @@ export function AppShell({
             </Link>
           ))}
         </nav>
+        {isAuthEnabled() ? (
+          <form action={logout} className="mt-8">
+            <button type="submit" className="sans text-sm text-[var(--muted)] underline">
+              Sign out
+            </button>
+          </form>
+        ) : null}
       </aside>
       <main className="px-6 py-8 md:px-10">{children}</main>
     </div>

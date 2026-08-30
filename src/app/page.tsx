@@ -5,10 +5,11 @@ import { accountBalanceCents } from "@/lib/ledger";
 import { formatMoney } from "@/lib/money";
 import { getBusiness, listAccounts, listInvoices } from "@/lib/queries";
 
-export default function HomePage() {
-  const business = getBusiness();
-  const accounts = listAccounts().slice(0, 8);
-  const openInvoices = listInvoices().filter((i) => i.status === "posted" && i.total_cents > i.paid_cents);
+export default async function HomePage() {
+  const business = await getBusiness();
+  const accounts = (await listAccounts()).slice(0, 8);
+  const openInvoices = (await listInvoices()).filter((i) => i.status === "posted" && i.total_cents > i.paid_cents);
+  const balances = await Promise.all(accounts.map((account) => accountBalanceCents(account.id)));
 
   return (
     <AppShell current="home">
@@ -36,12 +37,12 @@ export default function HomePage() {
       </div>
       <h3 className="mb-3 text-xl">Account balances</h3>
       <DataTable headers={["Code", "Account", "Type", "Balance"]}>
-        {accounts.map((account) => (
+        {accounts.map((account, index) => (
           <tr key={account.id} className="border-t border-[var(--line)]">
             <td className="px-4 py-3 sans">{account.code}</td>
             <td className="px-4 py-3">{account.name}</td>
             <td className="px-4 py-3 capitalize">{account.type}</td>
-            <td className="px-4 py-3 sans">{formatMoney(accountBalanceCents(account.id), business.currency)}</td>
+            <td className="px-4 py-3 sans">{formatMoney(balances[index], business.currency)}</td>
           </tr>
         ))}
       </DataTable>

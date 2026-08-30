@@ -5,23 +5,25 @@ import { accountBalanceCents } from "@/lib/ledger";
 import { formatMoney, todayIso } from "@/lib/money";
 import { getBusiness, listAccounts, listCashAccounts } from "@/lib/queries";
 
-export default function CashPage() {
-  const business = getBusiness();
-  const cashAccounts = listCashAccounts();
-  const offsets = listAccounts().filter((a) => a.type !== "asset" || !cashAccounts.some((c) => c.account_id === a.id));
+export default async function CashPage() {
+  const business = await getBusiness();
+  const cashAccounts = await listCashAccounts();
+  const accounts = await listAccounts();
+  const offsets = accounts.filter((a) => a.type !== "asset" || !cashAccounts.some((c) => c.account_id === a.id));
+  const balances = await Promise.all(cashAccounts.map((account) => accountBalanceCents(account.account_id)));
 
   return (
     <AppShell current="cash">
       <PageHeader title="Cash" />
       <DataTable headers={["Name", "GL account", "Balance"]}>
-        {cashAccounts.map((account) => (
+        {cashAccounts.map((account, index) => (
           <tr key={account.id} className="border-t border-[var(--line)]">
             <td className="px-4 py-3">{account.name}</td>
             <td className="px-4 py-3 sans">
               {account.code} {account.account_name}
             </td>
             <td className="px-4 py-3 sans">
-              {formatMoney(accountBalanceCents(account.account_id), business.currency)}
+              {formatMoney(balances[index], business.currency)}
             </td>
           </tr>
         ))}

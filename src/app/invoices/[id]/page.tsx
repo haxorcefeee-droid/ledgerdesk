@@ -8,10 +8,10 @@ import { getBusiness, getInvoice, listCashAccounts } from "@/lib/queries";
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const invoice = getInvoice(Number(id));
+  const invoice = await getInvoice(Number(id));
   if (!invoice) notFound();
-  const business = getBusiness();
-  const cashAccounts = listCashAccounts();
+  const business = await getBusiness();
+  const cashAccounts = await listCashAccounts();
 
   return (
     <AppShell current="invoices">

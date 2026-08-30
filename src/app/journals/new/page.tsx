@@ -3,8 +3,8 @@ import { PageHeader } from "@/components/ui";
 import { listAccounts } from "@/lib/queries";
 import { JournalForm } from "./journal-form";
 
-export default function NewJournalPage() {
-  const accounts = listAccounts();
+export default async function NewJournalPage() {
+  const accounts = await listAccounts();
   return (
     <AppShell current="journals">
       <PageHeader title="New journal entry" />

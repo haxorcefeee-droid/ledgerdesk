@@ -17,13 +17,13 @@ export default async function ReportsPage({
   searchParams: Promise<{ asOf?: string; from?: string; to?: string }>;
 }) {
   const params = await searchParams;
-  const business = getBusiness();
+  const business = await getBusiness();
   const asOf = params.asOf || todayIso();
   const from = params.from || yearStart(asOf, business.fiscal_year_start);
   const to = params.to || asOf;
-  const trial = trialBalance(asOf);
-  const pnl = profitAndLoss(from, to);
-  const sheet = balanceSheet(asOf);
+  const trial = await trialBalance(asOf);
+  const pnl = await profitAndLoss(from, to);
+  const sheet = await balanceSheet(asOf);
   const trialDebit = trial.reduce((s, r) => s + r.debitCents, 0);
   const trialCredit = trial.reduce((s, r) => s + r.creditCents, 0);
 

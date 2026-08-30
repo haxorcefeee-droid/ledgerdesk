@@ -2,8 +2,8 @@ import { AppShell } from "@/components/shell";
 import { ButtonLink, DataTable, PageHeader } from "@/components/ui";
 import { listCustomers } from "@/lib/queries";
 
-export default function CustomersPage() {
-  const customers = listCustomers();
+export default async function CustomersPage() {
+  const customers = await listCustomers();
   return (
     <AppShell current="customers">
       <PageHeader title="Customers" action={<ButtonLink href="/customers/new">New customer</ButtonLink>} />

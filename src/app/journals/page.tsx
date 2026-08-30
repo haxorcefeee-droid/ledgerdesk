@@ -4,9 +4,9 @@ import { ButtonLink, DataTable, PageHeader } from "@/components/ui";
 import { formatMoney } from "@/lib/money";
 import { getBusiness, listJournalEntries } from "@/lib/queries";
 
-export default function JournalsPage() {
-  const business = getBusiness();
-  const entries = listJournalEntries();
+export default async function JournalsPage() {
+  const business = await getBusiness();
+  const entries = await listJournalEntries();
   return (
     <AppShell current="journals">
       <PageHeader title="Journal" action={<ButtonLink href="/journals/new">New entry</ButtonLink>} />
