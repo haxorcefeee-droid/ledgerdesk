@@ -389,25 +389,22 @@ export async function migrateV2(db: Db, dialect: "sqlite" | "postgres") {
     }
   }
 
-  const businesses = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM businesses");
-  const legacy = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM business");
-  if ((businesses?.n ?? 0) === 0 && (legacy?.n ?? 0) > 0) {
-    const row = await db.get<{
-      name: string;
-      currency: string;
-      fiscal_year_start: string;
-      modules_json: string;
-    }>("SELECT name, currency, fiscal_year_start, modules_json FROM business WHERE id = 1");
-    if (row) {
-      await db.run(
-        "INSERT INTO businesses (id, name, currency, fiscal_year_start, modules_json) VALUES (?, ?, ?, ?, ?)",
-        1,
-        row.name,
-        row.currency,
-        row.fiscal_year_start,
-        JSON.stringify({ ...DEFAULT_MODULES, ...(safeJson(row.modules_json) as object) }),
-      );
-    }
+  const existing = await db.get<{ id: number }>("SELECT id FROM businesses LIMIT 1");
+  const legacy = await db.get<{
+    name: string;
+    currency: string;
+    fiscal_year_start: string;
+    modules_json: string;
+  }>("SELECT name, currency, fiscal_year_start, modules_json FROM business WHERE id = 1");
+  if (!existing && legacy) {
+    await db.run(
+      "INSERT INTO businesses (id, name, currency, fiscal_year_start, modules_json) VALUES (?, ?, ?, ?, ?)",
+      1,
+      legacy.name,
+      legacy.currency,
+      legacy.fiscal_year_start,
+      JSON.stringify({ ...DEFAULT_MODULES, ...(safeJson(legacy.modules_json) as object) }),
+    );
   }
 }
 

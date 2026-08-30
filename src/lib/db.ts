@@ -1,6 +1,7 @@
 import { postgresUrl } from "./database-url";
 import { DEFAULT_MODULES } from "./modules";
 import { migrateV2 } from "./schema-v2";
+import { asCount } from "./sql-count";
 
 export type RunResult = { lastInsertRowid: number };
 
@@ -80,7 +81,7 @@ async function openDb(): Promise<Db> {
     const db = await openPostgres(url);
     await migratePostgres(db);
     await migrateV2(db, "postgres");
-    await seedIfEmpty(db);
+    await seedSafely(db);
     await ensureSystemAccounts(db);
     return db;
   }
@@ -90,7 +91,7 @@ async function openDb(): Promise<Db> {
   const db = await openSqlite();
   await migrateSqlite(db);
   await migrateV2(db, "sqlite");
-  await seedIfEmpty(db);
+  await seedSafely(db);
   await ensureSystemAccounts(db);
   return db;
 }
@@ -382,9 +383,62 @@ async function migratePostgres(db: DbClient) {
   }
 }
 
+async function seedSafely(db: Db) {
+  try {
+    await seedIfEmpty(db);
+  } catch (err) {
+    console.error("[ledgerdesk] seedIfEmpty failed", err);
+  }
+}
+
+async function adoptExistingBooks(
+  db: DbClient,
+  legacy?: {
+    name?: string;
+    currency?: string;
+    fiscal_year_start?: string;
+    modules_json?: string;
+  },
+) {
+  const name = legacy?.name || "My Business";
+  const currency = legacy?.currency || "USD";
+  const fiscalYearStart = legacy?.fiscal_year_start || "01-01";
+  let modules = DEFAULT_MODULES;
+  try {
+    modules = { ...DEFAULT_MODULES, ...(legacy?.modules_json ? JSON.parse(legacy.modules_json) : {}) };
+  } catch {
+    modules = DEFAULT_MODULES;
+  }
+  await db.run(
+    "INSERT INTO businesses (id, name, currency, fiscal_year_start, modules_json) VALUES (?, ?, ?, ?, ?)",
+    1,
+    name,
+    currency,
+    fiscalYearStart,
+    JSON.stringify(modules),
+  );
+  await db.exec("UPDATE accounts SET business_id = 1 WHERE business_id IS NULL");
+  await db.exec("UPDATE cash_accounts SET business_id = 1 WHERE business_id IS NULL");
+  await db.exec("UPDATE journal_entries SET business_id = 1 WHERE business_id IS NULL");
+  await db.exec("UPDATE customers SET business_id = 1 WHERE business_id IS NULL");
+  await db.exec("UPDATE invoices SET business_id = 1 WHERE business_id IS NULL");
+}
+
 async function seedIfEmpty(db: Db) {
-  const existing = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM businesses");
-  if ((existing?.n ?? 0) > 0) return;
+  const existing = await db.get<{ id: number }>("SELECT id FROM businesses LIMIT 1");
+  if (existing) return;
+
+  const legacy = await db.get<{
+    name: string;
+    currency: string;
+    fiscal_year_start: string;
+    modules_json: string;
+  }>("SELECT name, currency, fiscal_year_start, modules_json FROM business WHERE id = 1");
+  const accountCount = asCount(await db.get<{ n: unknown }>("SELECT COUNT(*) AS n FROM accounts"));
+  if (legacy || accountCount > 0) {
+    await adoptExistingBooks(db, legacy ?? undefined);
+    return;
+  }
 
   await db.transaction(async (tx) => {
     await tx.run(
@@ -393,15 +447,14 @@ async function seedIfEmpty(db: Db) {
       "North Pine Studio",
       JSON.stringify(DEFAULT_MODULES),
     );
-    try {
+    const legacyCount = asCount(await tx.get<{ n: unknown }>("SELECT COUNT(*) AS n FROM business"));
+    if (legacyCount === 0) {
       await tx.run(
         "INSERT INTO business (id, name, currency, fiscal_year_start, modules_json) VALUES (?, ?, 'USD', '01-01', ?)",
         1,
         "North Pine Studio",
         JSON.stringify(DEFAULT_MODULES),
       );
-    } catch {
-      // legacy single-row table may already exist
     }
 
     const insertAccount =
@@ -459,14 +512,27 @@ async function ensureSystemAccounts(db: Db) {
         key,
       );
       if (found) continue;
-      await db.run(
-        "INSERT INTO accounts (code, name, type, is_system, system_key, business_id) VALUES (?, ?, ?, 1, ?, ?)",
-        code,
-        name,
-        type,
-        key,
+      const byCode = await db.get<{ id: number }>(
+        "SELECT id FROM accounts WHERE business_id = ? AND code = ?",
         business.id,
+        code,
       );
+      if (byCode) {
+        await db.run("UPDATE accounts SET system_key = ?, is_system = 1 WHERE id = ?", key, byCode.id);
+        continue;
+      }
+      try {
+        await db.run(
+          "INSERT INTO accounts (code, name, type, is_system, system_key, business_id) VALUES (?, ?, ?, 1, ?, ?)",
+          code,
+          name,
+          type,
+          key,
+          business.id,
+        );
+      } catch {
+        // unique code already present for this business
+      }
     }
   }
 }
