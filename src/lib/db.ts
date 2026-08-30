@@ -69,9 +69,12 @@ function coerceRow<T>(row: Record<string, unknown> | undefined): T | undefined {
   return out as T;
 }
 
-type PgSql = import("postgres").Sql;
+type PgQueryable = {
+  unsafe: (query: string, params?: never[]) => Promise<unknown[]>;
+  begin: (fn: (tx: PgQueryable) => Promise<unknown>) => Promise<unknown>;
+};
 
-function makePgClient(sql: PgSql): DbClient {
+function makePgClient(sql: PgQueryable): DbClient {
   return {
     async get<T>(text: string, ...params: unknown[]) {
       const rows = await sql.unsafe(toPg(text), params as never[]);
@@ -103,12 +106,16 @@ async function openPostgres(url: string): Promise<Db> {
     idle_timeout: 20,
     connect_timeout: 15,
     ssl: "require",
-  });
+  }) as unknown as PgQueryable;
   const client = makePgClient(sql);
   return {
     ...client,
-    transaction(fn) {
-      return sql.begin(async (tx) => fn(makePgClient(tx)));
+    async transaction<T>(fn: (db: DbClient) => Promise<T>): Promise<T> {
+      let result!: T;
+      await sql.begin(async (tx) => {
+        result = await fn(makePgClient(tx));
+      });
+      return result;
     },
   };
 }
@@ -125,13 +132,13 @@ async function openSqlite(): Promise<Db> {
 
   const client: DbClient = {
     async get<T>(text: string, ...params: unknown[]) {
-      return raw.prepare(text).get(...params) as T | undefined;
+      return raw.prepare(text).get(...(params as never[])) as T | undefined;
     },
     async all<T>(text: string, ...params: unknown[]) {
-      return raw.prepare(text).all(...params) as T[];
+      return raw.prepare(text).all(...(params as never[])) as T[];
     },
     async run(text: string, ...params: unknown[]) {
-      const result = raw.prepare(text).run(...params);
+      const result = raw.prepare(text).run(...(params as never[]));
       return { lastInsertRowid: Number(result.lastInsertRowid) };
     },
     async exec(text: string) {
