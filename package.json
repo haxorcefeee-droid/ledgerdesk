@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --experimental-strip-types --test tests/money.test.ts tests/ledger.test.ts tests/sqlite-journal.test.ts && tsx --test tests/db-journal.test.ts"
+    "test": "node --experimental-strip-types --test tests/money.test.ts tests/ledger.test.ts tests/sqlite-journal.test.ts tests/sql-count.test.ts && tsx --test tests/db-journal.test.ts tests/prod-migrate.test.ts"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.10",

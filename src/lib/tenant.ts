@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, verifySessionToken } from "./auth";
 import { getDb } from "./db";
+import { asCount } from "./sql-count";
 import { DEFAULT_MODULES, type ModuleKey, type Role } from "./modules";
 import { asPlain, asPlainList } from "./plain";
 
@@ -36,8 +37,8 @@ export type Tenant = {
 
 export async function userCount(): Promise<number> {
   const db = await getDb();
-  const row = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM users");
-  return row?.n ?? 0;
+  const row = await db.get<{ n: unknown }>("SELECT COUNT(*) AS n FROM users");
+  return asCount(row);
 }
 
 export async function optionalTenant(): Promise<Tenant | null> {

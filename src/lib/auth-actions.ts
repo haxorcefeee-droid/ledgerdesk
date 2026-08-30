@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, createSessionToken, sessionCookieOptions } from "./auth";
 import { getDb, seedBusinessBooks } from "./db";
+import { asCount } from "./sql-count";
 import { DEFAULT_MODULES } from "./modules";
 import { hashPassword, verifyPassword } from "./passwords";
 
@@ -18,8 +19,8 @@ async function setSession(userId: number, businessId: number) {
 
 export async function setupAccount(form: FormData) {
   const db = await getDb();
-  const existing = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM users");
-  if ((existing?.n ?? 0) > 0) redirect("/login");
+  const existing = await db.get<{ n: unknown }>("SELECT COUNT(*) AS n FROM users");
+  if (asCount(existing) > 0) redirect("/login");
   const name = formString(form, "name");
   const email = formString(form, "email").toLowerCase();
   const password = formString(form, "password");
