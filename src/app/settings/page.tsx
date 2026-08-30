@@ -3,8 +3,8 @@ import { Field, PageHeader, PrimaryButton, inputClass } from "@/components/ui";
 import { updateBusiness } from "@/lib/actions";
 import { getBusiness } from "@/lib/queries";
 
-export default function SettingsPage() {
-  const business = getBusiness();
+export default async function SettingsPage() {
+  const business = await getBusiness();
   return (
     <AppShell current="settings">
       <PageHeader title="Business" />

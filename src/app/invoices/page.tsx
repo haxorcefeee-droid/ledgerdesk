@@ -4,9 +4,9 @@ import { ButtonLink, DataTable, PageHeader } from "@/components/ui";
 import { formatMoney } from "@/lib/money";
 import { getBusiness, listInvoices } from "@/lib/queries";
 
-export default function InvoicesPage() {
-  const business = getBusiness();
-  const invoices = listInvoices();
+export default async function InvoicesPage() {
+  const business = await getBusiness();
+  const invoices = await listInvoices();
   return (
     <AppShell current="invoices">
       <PageHeader title="Sales invoices" action={<ButtonLink href="/invoices/new">New invoice</ButtonLink>} />

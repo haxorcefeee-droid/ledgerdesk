@@ -6,9 +6,9 @@ import { getBusiness, getJournalEntry } from "@/lib/queries";
 
 export default async function JournalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const entry = getJournalEntry(Number(id));
+  const entry = await getJournalEntry(Number(id));
   if (!entry) notFound();
-  const business = getBusiness();
+  const business = await getBusiness();
   return (
     <AppShell current="journals">
       <PageHeader title={entry.memo || `Entry ${entry.id}`} />

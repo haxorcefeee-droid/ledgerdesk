@@ -10,10 +10,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --experimental-strip-types --test tests/money.test.ts tests/ledger.test.ts tests/sqlite-journal.test.ts"
+    "test": "node --experimental-strip-types --test tests/money.test.ts tests/ledger.test.ts tests/sqlite-journal.test.ts && tsx --test tests/db-journal.test.ts"
   },
   "dependencies": {
     "next": "^15.5.2",
+    "postgres": "^3.4.9",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "server-only": "^0.0.1",
@@ -28,6 +29,7 @@
     "eslint": "^9.34.0",
     "eslint-config-next": "^15.5.2",
     "tailwindcss": "^4.1.12",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
 }

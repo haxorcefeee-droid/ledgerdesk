@@ -4,9 +4,9 @@ import { getBusiness, getInvoice } from "@/lib/queries";
 
 export default async function InvoicePrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const invoice = getInvoice(Number(id));
+  const invoice = await getInvoice(Number(id));
   if (!invoice) notFound();
-  const business = getBusiness();
+  const business = await getBusiness();
   return (
     <article className="mx-auto max-w-2xl bg-white p-10">
       <p className="sans text-xs tracking-[0.2em] uppercase text-stone-500">Invoice</p>

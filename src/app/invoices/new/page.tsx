@@ -3,9 +3,9 @@ import { PageHeader } from "@/components/ui";
 import { listAccounts, listCustomers } from "@/lib/queries";
 import { InvoiceForm } from "./invoice-form";
 
-export default function NewInvoicePage() {
-  const customers = listCustomers();
-  const incomeAccounts = listAccounts().filter((a) => a.type === "income");
+export default async function NewInvoicePage() {
+  const customers = await listCustomers();
+  const incomeAccounts = (await listAccounts()).filter((a) => a.type === "income");
   return (
     <AppShell current="invoices">
       <PageHeader title="New sales invoice" />

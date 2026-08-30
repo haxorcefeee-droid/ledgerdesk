@@ -5,9 +5,9 @@ import { getBusiness, getInvoice } from "@/lib/queries";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const invoice = getInvoice(Number(id));
+  const invoice = await getInvoice(Number(id));
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const business = getBusiness();
+  const business = await getBusiness();
   const bytes = invoicePdfBytes({
     businessName: business.name,
     currency: business.currency,
