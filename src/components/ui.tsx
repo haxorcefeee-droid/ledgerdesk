@@ -53,7 +53,7 @@ export function Field({
 }
 
 export const inputClass =
-  "w-full rounded-md border border-[var(--line)] bg-white px-3 py-2 sans text-sm outline-none focus:border-teal-700";
+  "w-full rounded-md border border-[var(--line)] bg-white px-3 py-2 sans text-sm outline-none focus:border-teal-700 dark:bg-stone-900 dark:text-[var(--ink)]";
 
 export function DataTable({
   headers,

@@ -11,6 +11,17 @@
   --danger: #b91c1c;
 }
 
+html.dark {
+  --bg: #1c1917;
+  --ink: #f5f5f4;
+  --muted: #a8a29e;
+  --line: #44403c;
+  --panel: #292524;
+  --accent: #5eead4;
+  --accent-ink: #042f2e;
+  --danger: #fda4af;
+}
+
 html,
 body {
   background: var(--bg);

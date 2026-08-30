@@ -1,15 +1,27 @@
 import Link from "next/link";
 import { AppShell } from "@/components/shell";
+import { SearchForm } from "@/components/search-form";
 import { ButtonLink, DataTable, PageHeader } from "@/components/ui";
 import { formatMoney } from "@/lib/money";
 import { getBusiness, listInvoices } from "@/lib/queries";
 
-export default async function InvoicesPage() {
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const q = ((await searchParams).q ?? "").toLowerCase();
   const business = await getBusiness();
-  const invoices = await listInvoices();
+  const invoices = (await listInvoices()).filter(
+    (invoice) =>
+      !q ||
+      invoice.number.toLowerCase().includes(q) ||
+      invoice.customer_name.toLowerCase().includes(q),
+  );
   return (
     <AppShell current="invoices">
       <PageHeader title="Sales invoices" action={<ButtonLink href="/invoices/new">New invoice</ButtonLink>} />
+      <SearchForm placeholder="Search invoices" />
       <DataTable headers={["Number", "Customer", "Date", "Status", "Total", "Balance"]}>
         {invoices.map((invoice) => (
           <tr key={invoice.id} className="border-t border-[var(--line)]">

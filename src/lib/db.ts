@@ -1,5 +1,6 @@
 import { postgresUrl } from "./database-url";
-import { DEFAULT_MODULES } from "./types";
+import { DEFAULT_MODULES } from "./modules";
+import { migrateV2 } from "./schema-v2";
 
 export type RunResult = { lastInsertRowid: number };
 
@@ -25,12 +26,62 @@ export function resetDbForTests(): void {
   instance = null;
 }
 
+export async function seedBusinessBooks(db: DbClient, businessId: number) {
+  const insertAccount =
+    "INSERT INTO accounts (code, name, type, is_system, system_key, business_id) VALUES (?, ?, ?, ?, ?, ?)";
+  const rows: Array<[string, string, string, number, string | null]> = [
+    ["1000", "Operating bank", "asset", 0, null],
+    ["1100", "Accounts receivable", "asset", 1, "accounts_receivable"],
+    ["1200", "Inventory", "asset", 1, "inventory"],
+    ["2000", "Accounts payable", "liability", 1, "accounts_payable"],
+    ["2100", "Payroll liabilities", "liability", 1, "payroll_liability"],
+    ["3000", "Owner equity", "equity", 0, null],
+    ["4000", "Sales", "income", 1, "sales"],
+    ["5000", "Operating expenses", "expense", 0, null],
+    ["5100", "Rent", "expense", 0, null],
+    ["5200", "Supplies", "expense", 0, null],
+    ["5300", "COGS", "expense", 1, "cogs"],
+    ["5400", "Depreciation", "expense", 1, "depreciation"],
+    ["5500", "Wages", "expense", 1, "wages"],
+  ];
+  for (const [code, name, type, system, key] of rows) {
+    const exists = await db.get<{ id: number }>(
+      "SELECT id FROM accounts WHERE business_id = ? AND code = ?",
+      businessId,
+      code,
+    );
+    if (exists) continue;
+    await db.run(insertAccount, code, name, type, system, key, businessId);
+  }
+  const bank = await db.get<{ id: number }>(
+    "SELECT id FROM accounts WHERE business_id = ? AND code = '1000'",
+    businessId,
+  );
+  if (bank) {
+    const cash = await db.get<{ id: number }>(
+      "SELECT id FROM cash_accounts WHERE business_id = ? AND account_id = ?",
+      businessId,
+      bank.id,
+    );
+    if (!cash) {
+      await db.run(
+        "INSERT INTO cash_accounts (name, account_id, business_id, currency) VALUES (?, ?, ?, 'USD')",
+        "Operating bank",
+        bank.id,
+        businessId,
+      );
+    }
+  }
+}
+
 async function openDb(): Promise<Db> {
   const url = postgresUrl();
   if (url) {
     const db = await openPostgres(url);
     await migratePostgres(db);
+    await migrateV2(db, "postgres");
     await seedIfEmpty(db);
+    await ensureSystemAccounts(db);
     return db;
   }
   if (process.env.VERCEL) {
@@ -38,7 +89,9 @@ async function openDb(): Promise<Db> {
   }
   const db = await openSqlite();
   await migrateSqlite(db);
+  await migrateV2(db, "sqlite");
   await seedIfEmpty(db);
+  await ensureSystemAccounts(db);
   return db;
 }
 
@@ -330,29 +383,90 @@ async function migratePostgres(db: DbClient) {
 }
 
 async function seedIfEmpty(db: Db) {
-  const row = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM business");
-  if ((row?.n ?? 0) > 0) return;
+  const existing = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM businesses");
+  if ((existing?.n ?? 0) > 0) return;
 
   await db.transaction(async (tx) => {
     await tx.run(
-      "INSERT INTO business (id, name, currency, fiscal_year_start, modules_json) VALUES (?, ?, 'USD', '01-01', ?)",
+      "INSERT INTO businesses (id, name, currency, fiscal_year_start, modules_json) VALUES (?, ?, 'USD', '01-01', ?)",
       1,
       "North Pine Studio",
       JSON.stringify(DEFAULT_MODULES),
     );
+    try {
+      await tx.run(
+        "INSERT INTO business (id, name, currency, fiscal_year_start, modules_json) VALUES (?, ?, 'USD', '01-01', ?)",
+        1,
+        "North Pine Studio",
+        JSON.stringify(DEFAULT_MODULES),
+      );
+    } catch {
+      // legacy single-row table may already exist
+    }
 
     const insertAccount =
-      "INSERT INTO accounts (code, name, type, is_system, system_key) VALUES (?, ?, ?, ?, ?)";
+      "INSERT INTO accounts (code, name, type, is_system, system_key, business_id) VALUES (?, ?, ?, ?, ?, 1)";
     await tx.run(insertAccount, "1000", "Operating bank", "asset", 0, null);
     await tx.run(insertAccount, "1100", "Accounts receivable", "asset", 1, "accounts_receivable");
+    await tx.run(insertAccount, "1200", "Inventory", "asset", 1, "inventory");
+    await tx.run(insertAccount, "2000", "Accounts payable", "liability", 1, "accounts_payable");
+    await tx.run(insertAccount, "2100", "Payroll liabilities", "liability", 1, "payroll_liability");
     await tx.run(insertAccount, "3000", "Owner equity", "equity", 0, null);
     await tx.run(insertAccount, "4000", "Sales", "income", 1, "sales");
     await tx.run(insertAccount, "5000", "Operating expenses", "expense", 0, null);
     await tx.run(insertAccount, "5100", "Rent", "expense", 0, null);
     await tx.run(insertAccount, "5200", "Supplies", "expense", 0, null);
+    await tx.run(insertAccount, "5300", "COGS", "expense", 1, "cogs");
+    await tx.run(insertAccount, "5400", "Depreciation", "expense", 1, "depreciation");
+    await tx.run(insertAccount, "5500", "Wages", "expense", 1, "wages");
 
-    const bank = await tx.get<{ id: number }>("SELECT id FROM accounts WHERE code = ?", "1000");
+    const bank = await tx.get<{ id: number }>("SELECT id FROM accounts WHERE code = ? AND business_id = 1", "1000");
     if (!bank) throw new Error("Failed to seed operating bank.");
-    await tx.run("INSERT INTO cash_accounts (name, account_id) VALUES (?, ?)", "Operating bank", bank.id);
+    await tx.run(
+      "INSERT INTO cash_accounts (name, account_id, business_id, currency) VALUES (?, ?, 1, 'USD')",
+      "Operating bank",
+      bank.id,
+    );
+    await tx.run("INSERT INTO locations (business_id, name) VALUES (1, ?)", "Main warehouse");
+    await tx.run("INSERT INTO divisions (business_id, name, code) VALUES (1, ?, ?)", "General", "GEN");
+    await tx.run(
+      "INSERT INTO tax_codes (business_id, code, name, rate_bps, inclusive) VALUES (1, ?, ?, ?, 0)",
+      "TAX",
+      "Standard tax",
+      0,
+    );
   });
+}
+
+const SYSTEM_ACCOUNTS: Array<[string, string, string, string]> = [
+  ["1100", "Accounts receivable", "asset", "accounts_receivable"],
+  ["1200", "Inventory", "asset", "inventory"],
+  ["2000", "Accounts payable", "liability", "accounts_payable"],
+  ["2100", "Payroll liabilities", "liability", "payroll_liability"],
+  ["4000", "Sales", "income", "sales"],
+  ["5300", "COGS", "expense", "cogs"],
+  ["5400", "Depreciation", "expense", "depreciation"],
+  ["5500", "Wages", "expense", "wages"],
+];
+
+async function ensureSystemAccounts(db: Db) {
+  const businesses = await db.all<{ id: number }>("SELECT id FROM businesses");
+  for (const business of businesses) {
+    for (const [code, name, type, key] of SYSTEM_ACCOUNTS) {
+      const found = await db.get<{ id: number }>(
+        "SELECT id FROM accounts WHERE business_id = ? AND system_key = ?",
+        business.id,
+        key,
+      );
+      if (found) continue;
+      await db.run(
+        "INSERT INTO accounts (code, name, type, is_system, system_key, business_id) VALUES (?, ?, ?, 1, ?, ?)",
+        code,
+        name,
+        type,
+        key,
+        business.id,
+      );
+    }
+  }
 }

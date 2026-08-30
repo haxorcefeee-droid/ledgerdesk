@@ -77,6 +77,9 @@ export default async function CashPage() {
         <Field label="New GL code">
           <input className={inputClass} name="code" required placeholder="1010" />
         </Field>
+        <Field label="Currency">
+          <input className={inputClass} name="currency" defaultValue={business.currency} />
+        </Field>
         <div className="md:col-span-2">
           <PrimaryButton>Create cash account</PrimaryButton>
         </div>

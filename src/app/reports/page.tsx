@@ -27,9 +27,25 @@ export default async function ReportsPage({
   const trialDebit = trial.reduce((s, r) => s + r.debitCents, 0);
   const trialCredit = trial.reduce((s, r) => s + r.creditCents, 0);
 
+  const links = [
+    { href: "/reports/cashflow", label: "Cash flow" },
+    { href: "/reports/aged", label: "Aged AR / AP" },
+    { href: "/reports/statements", label: "Statements" },
+    { href: "/reports/tax", label: "Tax summary" },
+    { href: "/reports/forecast", label: "Forecast" },
+    { href: "/reports/custom", label: "Custom builder" },
+  ];
+
   return (
     <AppShell current="reports">
       <PageHeader title="Reports" />
+      <div className="mb-6 flex flex-wrap gap-2">
+        {links.map((link) => (
+          <a key={link.href} href={link.href} className="sans rounded-md border border-[var(--line)] px-3 py-2 text-sm hover:border-teal-700">
+            {link.label}
+          </a>
+        ))}
+      </div>
       <form className="mb-8 flex flex-wrap items-end gap-4 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
         <Field label="As of">
           <input className={inputClass} type="date" name="asOf" defaultValue={asOf} />

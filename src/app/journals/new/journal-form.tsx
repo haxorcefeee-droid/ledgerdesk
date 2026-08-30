@@ -18,6 +18,9 @@ export function JournalForm({ accounts }: { accounts: Account[] }) {
         <Field label="Memo">
           <input className={inputClass} name="memo" defaultValue="Manual journal" />
         </Field>
+        <Field label="Reference">
+          <input className={inputClass} name="reference" placeholder="Custom reference" />
+        </Field>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">

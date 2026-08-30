@@ -25,6 +25,7 @@ describe("db journal adapter", () => {
     assert.ok(bank && equity);
 
     await postJournal({
+      businessId: business.id,
       date: "2026-01-15",
       memo: "Owner contribution",
       sourceType: "manual",

@@ -6,48 +6,67 @@ import { getDb } from "./db";
 import { postJournal, systemAccountId } from "./ledger";
 import { parseMoney } from "./money";
 import { getInvoice, nextInvoiceNumber } from "./queries";
-import { ACCOUNT_TYPES, DEFAULT_MODULES, type AccountType, type Modules } from "./types";
+import { requireTenant } from "./tenant";
+import { ACCOUNT_TYPES, DEFAULT_MODULES, type AccountType } from "./types";
+import { DEFAULT_MODULES as FULL_MODULES, type ModuleKey } from "./modules";
 
 function formString(form: FormData, key: string): string {
   return String(form.get(key) ?? "").trim();
 }
 
 export async function updateBusiness(form: FormData) {
+  const tenant = await requireTenant();
   const name = formString(form, "name");
   const currency = formString(form, "currency") || "USD";
   const fiscal = formString(form, "fiscal_year_start") || "01-01";
   if (!name) throw new Error("Business name is required.");
-  const modules: Modules = {
-    cash: form.get("module_cash") === "on",
-    customers: form.get("module_customers") === "on",
-    invoices: form.get("module_invoices") === "on",
-    reports: form.get("module_reports") === "on",
-  };
+  const modules = { ...FULL_MODULES };
+  for (const key of Object.keys(FULL_MODULES) as ModuleKey[]) {
+    modules[key] = form.get(`module_${key}`) === "on";
+  }
   const db = await getDb();
   await db.run(
-    "UPDATE business SET name = ?, currency = ?, fiscal_year_start = ?, modules_json = ? WHERE id = 1",
+    "UPDATE businesses SET name = ?, currency = ?, fiscal_year_start = ?, lock_date = ?, locale = ?, date_format = ?, number_format = ?, direction = ?, theme = ?, invoice_theme = ?, footer_text = ?, modules_json = ? WHERE id = ?",
     name,
     currency.toUpperCase(),
     fiscal,
+    formString(form, "lock_date") || null,
+    formString(form, "locale") || "en-US",
+    formString(form, "date_format") || "yyyy-mm-dd",
+    formString(form, "number_format") || "1,234.56",
+    formString(form, "direction") || "ltr",
+    formString(form, "theme") || "light",
+    formString(form, "invoice_theme") || "classic",
+    formString(form, "footer_text"),
     JSON.stringify({ ...DEFAULT_MODULES, ...modules }),
+    tenant.business.id,
   );
   revalidatePath("/");
   redirect("/settings");
 }
 
 export async function createAccount(form: FormData) {
+  const tenant = await requireTenant();
   const code = formString(form, "code");
   const name = formString(form, "name");
   const type = formString(form, "type") as AccountType;
   if (!code || !name) throw new Error("Code and name are required.");
   if (!ACCOUNT_TYPES.includes(type)) throw new Error("Invalid account type.");
   const db = await getDb();
-  await db.run("INSERT INTO accounts (code, name, type) VALUES (?, ?, ?)", code, name, type);
+  await db.run(
+    "INSERT INTO accounts (code, name, type, business_id, folder_id) VALUES (?, ?, ?, ?, ?)",
+    code,
+    name,
+    type,
+    tenant.business.id,
+    Number(formString(form, "folder_id")) || null,
+  );
   revalidatePath("/accounts");
   redirect("/accounts");
 }
 
 export async function createJournal(form: FormData) {
+  const tenant = await requireTenant();
   const date = formString(form, "date");
   const memo = formString(form, "memo");
   const accountIds = form.getAll("account_id").map((v) => Number(v));
@@ -58,27 +77,52 @@ export async function createJournal(form: FormData) {
     debitCents: parseMoney(debits[i] ?? "0"),
     creditCents: parseMoney(credits[i] ?? "0"),
   }));
-  await postJournal({ date, memo, sourceType: "manual", lines });
+  await postJournal({
+    businessId: tenant.business.id,
+    date,
+    memo,
+    sourceType: "manual",
+    lockDate: tenant.business.lock_date,
+    reference: formString(form, "reference"),
+    lines,
+  });
   revalidatePath("/journals");
   redirect("/journals");
 }
 
 export async function createCashAccount(form: FormData) {
+  const tenant = await requireTenant();
   const name = formString(form, "name");
   const code = formString(form, "code");
   if (!name || !code) throw new Error("Name and account code are required.");
   const db = await getDb();
   await db.transaction(async (tx) => {
-    await tx.run("INSERT INTO accounts (code, name, type) VALUES (?, ?, 'asset')", code, name);
-    const account = await tx.get<{ id: number }>("SELECT id FROM accounts WHERE code = ?", code);
+    await tx.run(
+      "INSERT INTO accounts (code, name, type, business_id) VALUES (?, ?, 'asset', ?)",
+      code,
+      name,
+      tenant.business.id,
+    );
+    const account = await tx.get<{ id: number }>(
+      "SELECT id FROM accounts WHERE code = ? AND business_id = ?",
+      code,
+      tenant.business.id,
+    );
     if (!account) throw new Error("Failed to create cash GL account.");
-    await tx.run("INSERT INTO cash_accounts (name, account_id) VALUES (?, ?)", name, account.id);
+    await tx.run(
+      "INSERT INTO cash_accounts (name, account_id, business_id, currency) VALUES (?, ?, ?, ?)",
+      name,
+      account.id,
+      tenant.business.id,
+      formString(form, "currency") || tenant.business.currency,
+    );
   });
   revalidatePath("/cash");
   redirect("/cash");
 }
 
 export async function recordCashMove(form: FormData) {
+  const tenant = await requireTenant();
   const kind = formString(form, "kind");
   const date = formString(form, "date");
   const memo = formString(form, "memo");
@@ -92,12 +136,17 @@ export async function recordCashMove(form: FormData) {
     cashAccountId,
   );
   if (!cash) throw new Error("Cash account not found.");
+  const journal = {
+    businessId: tenant.business.id,
+    date,
+    lockDate: tenant.business.lock_date,
+    sourceId: cashAccountId,
+  };
   if (kind === "receipt") {
     await postJournal({
-      date,
+      ...journal,
       memo: memo || "Cash receipt",
       sourceType: "cash_receipt",
-      sourceId: cashAccountId,
       lines: [
         { accountId: cash.account_id, debitCents: amount, creditCents: 0 },
         { accountId: offsetAccountId, debitCents: 0, creditCents: amount },
@@ -105,10 +154,9 @@ export async function recordCashMove(form: FormData) {
     });
   } else {
     await postJournal({
-      date,
+      ...journal,
       memo: memo || "Cash payment",
       sourceType: "cash_payment",
-      sourceId: cashAccountId,
       lines: [
         { accountId: offsetAccountId, debitCents: amount, creditCents: 0 },
         { accountId: cash.account_id, debitCents: 0, creditCents: amount },
@@ -121,20 +169,31 @@ export async function recordCashMove(form: FormData) {
 }
 
 export async function createCustomer(form: FormData) {
+  const tenant = await requireTenant();
   const name = formString(form, "name");
   if (!name) throw new Error("Customer name is required.");
   const db = await getDb();
   await db.run(
-    "INSERT INTO customers (name, email, address) VALUES (?, ?, ?)",
+    "INSERT INTO customers (name, email, address, business_id) VALUES (?, ?, ?, ?)",
     name,
     formString(form, "email"),
     formString(form, "address"),
+    tenant.business.id,
+  );
+  await db.run(
+    "INSERT INTO parties (business_id, kind, name, email, address, credit_limit_cents) VALUES (?, 'customer', ?, ?, ?, ?)",
+    tenant.business.id,
+    name,
+    formString(form, "email"),
+    formString(form, "address"),
+    parseMoney(formString(form, "credit_limit") || "0"),
   );
   revalidatePath("/customers");
   redirect("/customers");
 }
 
 export async function createInvoice(form: FormData) {
+  const tenant = await requireTenant();
   const customerId = Number(formString(form, "customer_id"));
   const date = formString(form, "date");
   const due = formString(form, "due_date") || null;
@@ -147,12 +206,13 @@ export async function createInvoice(form: FormData) {
   const number = await nextInvoiceNumber();
   const invoiceId = await db.transaction(async (tx) => {
     const result = await tx.run(
-      "INSERT INTO invoices (number, customer_id, date, due_date, notes, status) VALUES (?, ?, ?, ?, ?, 'draft')",
+      "INSERT INTO invoices (number, customer_id, date, due_date, notes, status, business_id) VALUES (?, ?, ?, ?, ?, 'draft', ?)",
       number,
       customerId,
       date,
       due,
       notes,
+      tenant.business.id,
     );
     const id = Number(result.lastInsertRowid);
     for (let i = 0; i < descriptions.length; i++) {
@@ -174,11 +234,12 @@ export async function createInvoice(form: FormData) {
 }
 
 export async function postInvoice(invoiceId: number) {
+  const tenant = await requireTenant();
   const invoice = await getInvoice(invoiceId);
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.status === "posted") return;
   if (invoice.lines.length === 0) throw new Error("Add at least one line before posting.");
-  const arId = await systemAccountId("accounts_receivable");
+  const arId = await systemAccountId(tenant.business.id, "accounts_receivable");
   const byIncome = new Map<number, number>();
   for (const line of invoice.lines) {
     const amount = Math.round(line.qty * line.unit_cents);
@@ -190,10 +251,12 @@ export async function postInvoice(invoiceId: number) {
     creditCents: cents,
   }));
   const entryId = await postJournal({
+    businessId: tenant.business.id,
     date: invoice.date,
     memo: `Sales invoice ${invoice.number}`,
     sourceType: "sales_invoice",
     sourceId: invoiceId,
+    lockDate: tenant.business.lock_date,
     lines: [{ accountId: arId, debitCents: invoice.totalCents, creditCents: 0 }, ...creditLines],
   });
   const db = await getDb();
@@ -207,6 +270,7 @@ export async function postInvoiceForm(form: FormData) {
 }
 
 export async function recordInvoicePayment(form: FormData) {
+  const tenant = await requireTenant();
   const invoiceId = Number(formString(form, "invoice_id"));
   const cashAccountId = Number(formString(form, "cash_account_id"));
   const date = formString(form, "date");
@@ -222,12 +286,14 @@ export async function recordInvoicePayment(form: FormData) {
     cashAccountId,
   );
   if (!cash) throw new Error("Cash account not found.");
-  const arId = await systemAccountId("accounts_receivable");
+  const arId = await systemAccountId(tenant.business.id, "accounts_receivable");
   const entryId = await postJournal({
+    businessId: tenant.business.id,
     date,
     memo: `Payment for ${invoice.number}`,
     sourceType: "invoice_payment",
     sourceId: invoiceId,
+    lockDate: tenant.business.lock_date,
     lines: [
       { accountId: cash.account_id, debitCents: amount, creditCents: 0 },
       { accountId: arId, debitCents: 0, creditCents: amount },

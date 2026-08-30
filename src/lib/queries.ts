@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { asPlain, asPlainList } from "./plain";
+import { requireTenant } from "./tenant";
 import { DEFAULT_MODULES, type Modules } from "./types";
 
 export type Business = {
@@ -11,29 +12,45 @@ export type Business = {
 };
 
 export async function getBusiness(): Promise<Business> {
-  const db = await getDb();
-  const row = await db.get<{
-    id: number;
-    name: string;
-    currency: string;
-    fiscal_year_start: string;
-    modules_json: string;
-  }>("SELECT id, name, currency, fiscal_year_start, modules_json FROM business WHERE id = 1");
-  if (!row) throw new Error("Business settings are missing.");
-  let modules = DEFAULT_MODULES;
   try {
-    modules = { ...DEFAULT_MODULES, ...JSON.parse(row.modules_json) };
+    const tenant = await requireTenant();
+    return asPlain({
+      id: tenant.business.id,
+      name: tenant.business.name,
+      currency: tenant.business.currency,
+      fiscal_year_start: tenant.business.fiscal_year_start,
+      modules: { ...DEFAULT_MODULES, ...tenant.business.modules },
+    });
   } catch {
-    modules = DEFAULT_MODULES;
+    const db = await getDb();
+    const row = await db.get<{
+      id: number;
+      name: string;
+      currency: string;
+      fiscal_year_start: string;
+      modules_json: string;
+    }>("SELECT id, name, currency, fiscal_year_start, modules_json FROM businesses ORDER BY id LIMIT 1");
+    if (!row) throw new Error("Business settings are missing.");
+    let modules = DEFAULT_MODULES;
+    try {
+      modules = { ...DEFAULT_MODULES, ...JSON.parse(row.modules_json) };
+    } catch {
+      modules = DEFAULT_MODULES;
+    }
+    return asPlain({ ...row, modules });
   }
-  return asPlain({ ...row, modules });
+}
+
+async function bizId(): Promise<number> {
+  return (await getBusiness()).id;
 }
 
 export async function listAccounts(includeArchived = false) {
   const db = await getDb();
+  const id = await bizId();
   const sql = includeArchived
-    ? "SELECT * FROM accounts ORDER BY code"
-    : "SELECT * FROM accounts WHERE archived = 0 ORDER BY code";
+    ? "SELECT * FROM accounts WHERE business_id = ? ORDER BY code"
+    : "SELECT * FROM accounts WHERE business_id = ? AND archived = 0 ORDER BY code";
   return asPlainList(
     await db.all<{
       id: number;
@@ -43,7 +60,7 @@ export async function listAccounts(includeArchived = false) {
       is_system: number;
       system_key: string | null;
       archived: number;
-    }>(sql),
+    }>(sql, id),
   );
 }
 
@@ -59,7 +76,9 @@ export async function listCashAccounts() {
     }>(
       `SELECT c.id, c.name, c.account_id, a.code, a.name AS account_name
        FROM cash_accounts c JOIN accounts a ON a.id = c.account_id
+       WHERE c.business_id = ?
        ORDER BY c.name`,
+      await bizId(),
     ),
   );
 }
@@ -72,7 +91,7 @@ export async function listCustomers() {
       name: string;
       email: string;
       address: string;
-    }>("SELECT * FROM customers ORDER BY name"),
+    }>("SELECT * FROM customers WHERE business_id = ? ORDER BY name", await bizId()),
   );
 }
 
@@ -90,7 +109,9 @@ export async function listJournalEntries() {
       `SELECT e.*,
               (SELECT COALESCE(SUM(debit_cents),0) FROM journal_lines WHERE entry_id = e.id) AS total_cents
        FROM journal_entries e
+       WHERE e.business_id = ?
        ORDER BY e.date DESC, e.id DESC`,
+      await bizId(),
     ),
   );
 }
@@ -144,7 +165,9 @@ export async function listInvoices() {
               (SELECT COALESCE(SUM(amount_cents), 0) FROM invoice_payments WHERE invoice_id = i.id) AS paid_cents
        FROM invoices i
        JOIN customers c ON c.id = i.customer_id
+       WHERE i.business_id = ?
        ORDER BY i.date DESC, i.id DESC`,
+      await bizId(),
     ),
   );
 }
@@ -166,8 +189,9 @@ export async function getInvoice(id: number) {
   }>(
     `SELECT i.*, c.name AS customer_name, c.email, c.address
        FROM invoices i JOIN customers c ON c.id = i.customer_id
-       WHERE i.id = ?`,
+       WHERE i.id = ? AND i.business_id = ?`,
     id,
+    await bizId(),
   );
   if (!invoice) return null;
   const lines = await db.all<{
@@ -202,6 +226,6 @@ export async function getInvoice(id: number) {
 
 export async function nextInvoiceNumber(): Promise<string> {
   const db = await getDb();
-  const row = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM invoices");
+  const row = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM invoices WHERE business_id = ?", await bizId());
   return `INV-${String((row?.n ?? 0) + 1).padStart(4, "0")}`;
 }
