@@ -1,16 +1,13 @@
-const URL_KEYS = [
-  "DATABASE_URL",
-  "POSTGRES_URL",
-  "POSTGRES_PRISMA_URL",
-  "NEON_DATABASE_URL",
-] as const;
-
 export function postgresUrl(): string | undefined {
-  for (const key of URL_KEYS) {
-    const value = process.env[key]?.trim();
-    if (value) return value;
-  }
-  return undefined;
+  const candidates = [
+    process.env.DATABASE_URL,
+    process.env.POSTGRES_URL,
+    process.env.POSTGRES_PRISMA_URL,
+    process.env.NEON_DATABASE_URL,
+    process.env.DATABASE_URL_UNPOOLED,
+    process.env.POSTGRES_URL_NON_POOLING,
+  ];
+  return candidates.map((value) => value?.trim()).find(Boolean);
 }
 
 export function hasPostgresUrl(): boolean {
