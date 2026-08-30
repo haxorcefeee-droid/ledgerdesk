@@ -16,7 +16,7 @@ export function BusinessSwitcher({
         name="business_id"
         defaultValue={currentId}
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
-        className="mt-1 w-full rounded-md border border-[var(--line)] bg-white px-2 py-2 sans text-sm dark:bg-stone-900"
+        className="mt-1 w-full rounded-md border border-[var(--line)] bg-white px-2 py-2 sans text-sm text-[var(--ink)] dark:bg-stone-900"
       >
         {businesses.map((biz) => (
           <option key={biz.id} value={biz.id}>
