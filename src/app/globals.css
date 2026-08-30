@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f4f1ea;
+  --ink: #1c1917;
+  --muted: #57534e;
+  --line: #d6d3d1;
+  --panel: #fffcf7;
+  --accent: #0f766e;
+  --accent-ink: #f0fdfa;
+  --danger: #b91c1c;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-serif), "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+}
+
+.sans {
+  font-family: var(--font-sans), "Segoe UI", sans-serif;
+}
+
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+}
+
+@media print {
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+}
