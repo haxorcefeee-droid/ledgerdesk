@@ -1,9 +1,17 @@
 import { AppShell } from "@/components/shell";
 import { Field, PageHeader, PrimaryButton, inputClass } from "@/components/ui";
 import { createAccount } from "@/lib/actions";
+import { getDb } from "@/lib/db";
+import { requireTenant } from "@/lib/tenant";
 import { ACCOUNT_TYPES } from "@/lib/types";
 
-export default function NewAccountPage() {
+export default async function NewAccountPage() {
+  const tenant = await requireTenant();
+  const db = await getDb();
+  const folders = await db.all<{ id: number; name: string }>(
+    "SELECT id, name FROM account_folders WHERE business_id = ? ORDER BY name",
+    tenant.business.id,
+  );
   return (
     <AppShell current="accounts">
       <PageHeader title="New account" />
@@ -19,6 +27,16 @@ export default function NewAccountPage() {
             {ACCOUNT_TYPES.map((type) => (
               <option key={type} value={type}>
                 {type}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Folder">
+          <select className={inputClass} name="folder_id" defaultValue="">
+            <option value="">None</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name}
               </option>
             ))}
           </select>

@@ -3,6 +3,7 @@ export type DraftLine = {
   debitCents: number;
   creditCents: number;
   memo?: string;
+  projectId?: number | null;
 };
 
 export function validateJournalLines(lines: DraftLine[]): DraftLine[] {

@@ -1,19 +1,59 @@
 import Link from "next/link";
 import { AppShell } from "@/components/shell";
 import { DataTable, PageHeader } from "@/components/ui";
-import { accountBalanceCents } from "@/lib/ledger";
-import { formatMoney } from "@/lib/money";
-import { getBusiness, listAccounts, listInvoices } from "@/lib/queries";
+import { accountBalanceCents, systemAccountId } from "@/lib/ledger";
+import { formatMoney, todayIso } from "@/lib/money";
+import { getBusiness, listAccounts, listCashAccounts, listInvoices } from "@/lib/queries";
+import { profitAndLoss } from "@/lib/reports";
+import { requireTenant } from "@/lib/tenant";
 
 export default async function HomePage() {
+  const tenant = await requireTenant();
   const business = await getBusiness();
   const accounts = (await listAccounts()).slice(0, 8);
+  const cashAccounts = await listCashAccounts();
   const openInvoices = (await listInvoices()).filter((i) => i.status === "posted" && i.total_cents > i.paid_cents);
   const balances = await Promise.all(accounts.map((account) => accountBalanceCents(account.id)));
+  const cashBalances = await Promise.all(cashAccounts.map((account) => accountBalanceCents(account.account_id)));
+  const cashTotal = cashBalances.reduce((sum, value) => sum + value, 0);
+  let ar = 0;
+  let ap = 0;
+  try {
+    ar = await accountBalanceCents(await systemAccountId(business.id, "accounts_receivable"));
+    ap = await accountBalanceCents(await systemAccountId(business.id, "accounts_payable"));
+  } catch {
+    ar = 0;
+    ap = 0;
+  }
+  const year = todayIso().slice(0, 4);
+  const pnl = await profitAndLoss(`${year}-01-01`, todayIso());
 
   return (
     <AppShell current="home">
       <PageHeader title="Overview" />
+      {tenant.business.lock_date ? (
+        <p className="mb-4 rounded-md border border-[var(--line)] bg-[var(--panel)] px-4 py-3 text-sm">
+          Periods on or before <span className="sans">{tenant.business.lock_date}</span> are locked.
+        </p>
+      ) : null}
+      <div className="mb-8 grid gap-4 md:grid-cols-4">
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
+          <p className="sans text-sm text-[var(--muted)]">Cash</p>
+          <p className="mt-2 text-2xl">{formatMoney(cashTotal, business.currency)}</p>
+        </div>
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
+          <p className="sans text-sm text-[var(--muted)]">Receivables</p>
+          <p className="mt-2 text-2xl">{formatMoney(ar, business.currency)}</p>
+        </div>
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
+          <p className="sans text-sm text-[var(--muted)]">Payables</p>
+          <p className="mt-2 text-2xl">{formatMoney(ap, business.currency)}</p>
+        </div>
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-5">
+          <p className="sans text-sm text-[var(--muted)]">YTD net income</p>
+          <p className="mt-2 text-2xl">{formatMoney(pnl.netCents, business.currency)}</p>
+        </div>
+      </div>
       <p className="mb-8 max-w-2xl text-[var(--muted)]">
         Every cash movement and invoice posts into the same journal. Reports read that journal — there is no second set of books.
       </p>

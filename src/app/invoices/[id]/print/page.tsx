@@ -1,14 +1,16 @@
 import { notFound } from "next/navigation";
 import { formatMoney } from "@/lib/money";
 import { getBusiness, getInvoice } from "@/lib/queries";
+import { requireTenant } from "@/lib/tenant";
 
 export default async function InvoicePrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const tenant = await requireTenant();
   const invoice = await getInvoice(Number(id));
   if (!invoice) notFound();
   const business = await getBusiness();
   return (
-    <article className="mx-auto max-w-2xl bg-white p-10">
+    <article className={`mx-auto max-w-2xl bg-white p-10 theme-${tenant.business.invoice_theme || "classic"}`}>
       <p className="sans text-xs tracking-[0.2em] uppercase text-stone-500">Invoice</p>
       <h1 className="mt-2 text-4xl">{business.name}</h1>
       <p className="mt-6 sans">
@@ -43,6 +45,7 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
       <p className="mt-6 sans">Total {formatMoney(invoice.totalCents, business.currency)}</p>
       <p className="sans">Balance {formatMoney(invoice.balanceCents, business.currency)}</p>
       {invoice.notes ? <p className="mt-6">{invoice.notes}</p> : null}
+      {tenant.business.footer_text ? <p className="mt-10 text-sm text-stone-500">{tenant.business.footer_text}</p> : null}
     </article>
   );
 }

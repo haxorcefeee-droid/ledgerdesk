@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/shell";
 import { DataTable, Field, PageHeader, PrimaryButton, inputClass } from "@/components/ui";
 import { postInvoiceForm, recordInvoicePayment } from "@/lib/actions";
+import { applyLateFee } from "@/lib/extra-actions";
 import { formatMoney, todayIso } from "@/lib/money";
 import { getBusiness, getInvoice, listCashAccounts } from "@/lib/queries";
 
@@ -79,6 +80,23 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </div>
         </form>
       )}
+      {invoice.status === "posted" && invoice.due_date && invoice.due_date < todayIso() && invoice.balanceCents > 0 ? (
+        <form action={applyLateFee} className="mt-6 grid max-w-xl gap-4 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-6 md:grid-cols-2">
+          <input type="hidden" name="invoice_id" value={invoice.id} />
+          <Field label="Late fee date">
+            <input className={inputClass} type="date" name="date" defaultValue={todayIso()} required />
+          </Field>
+          <Field label="Fee amount">
+            <input className={inputClass} name="amount" defaultValue={(invoice.balanceCents * 0.02 / 100).toFixed(2)} required />
+          </Field>
+          <Field label="Memo">
+            <input className={inputClass} name="memo" defaultValue="Late payment fee" />
+          </Field>
+          <div className="md:col-span-2">
+            <PrimaryButton>Add late fee</PrimaryButton>
+          </div>
+        </form>
+      ) : null}
     </AppShell>
   );
 }

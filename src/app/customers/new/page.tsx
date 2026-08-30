@@ -16,6 +16,9 @@ export default function NewCustomerPage() {
         <Field label="Address">
           <textarea className={inputClass} name="address" rows={3} />
         </Field>
+        <Field label="Credit limit">
+          <input className={inputClass} name="credit_limit" defaultValue="0" />
+        </Field>
         <PrimaryButton>Create customer</PrimaryButton>
       </form>
     </AppShell>
