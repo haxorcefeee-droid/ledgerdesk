@@ -1,3 +1,4 @@
+import { postgresUrl } from "./database-url";
 import { DEFAULT_MODULES } from "./types";
 
 export type RunResult = { lastInsertRowid: number };
@@ -25,14 +26,15 @@ export function resetDbForTests(): void {
 }
 
 async function openDb(): Promise<Db> {
-  if (process.env.DATABASE_URL) {
-    const db = await openPostgres(process.env.DATABASE_URL);
+  const url = postgresUrl();
+  if (url) {
+    const db = await openPostgres(url);
     await migratePostgres(db);
     await seedIfEmpty(db);
     return db;
   }
   if (process.env.VERCEL) {
-    throw new Error("DATABASE_URL is required on Vercel. Add Neon Postgres and set DATABASE_URL.");
+    throw new Error("DATABASE_URL or POSTGRES_URL is required on Vercel.");
   }
   const db = await openSqlite();
   await migrateSqlite(db);
