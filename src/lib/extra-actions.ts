@@ -574,6 +574,7 @@ export async function depreciateAsset(form: FormData) {
   const db = await getDb();
   const asset = await db.get<{
     id: number;
+    kind: string;
     cost_cents: number;
     residual_cents: number;
     life_months: number;
@@ -989,7 +990,6 @@ export async function applyBankRules() {
     amount_cents: number;
     description: string;
   }>("SELECT * FROM bank_statement_lines WHERE business_id = ? AND matched_move_id IS NULL", tenant.business.id);
-  let matched = 0;
   for (const line of lines) {
     const rule = rules.find((item) =>
       item.kind === "contains"
@@ -1036,10 +1036,8 @@ export async function applyBankRules() {
       entryId,
     );
     await db.run("UPDATE bank_statement_lines SET matched_move_id = ? WHERE id = ?", move?.id ?? entryId, line.id);
-    matched += 1;
   }
   redirect("/cash/reconcile");
-  return { matched };
 }
 
 export async function updateInvestmentPrice(form: FormData) {

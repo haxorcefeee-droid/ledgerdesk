@@ -5,7 +5,10 @@ import { BusinessSwitcher } from "./business-switcher";
 import { HuiMenu } from "./hui";
 import { SearchForm } from "./search-form";
 
-const GROUPS = [
+type NavItem = { href: string; label: string; key: string; module?: string };
+type NavGroup = { label: string; module?: string; items: NavItem[] };
+
+const GROUPS: NavGroup[] = [
   {
     label: "Ledger",
     items: [

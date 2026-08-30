@@ -3,7 +3,7 @@ import { DataTable, Field, PageHeader, PrimaryButton, inputClass } from "@/compo
 import { HuiSelect } from "@/components/hui";
 import { createWithholding } from "@/lib/extra-actions";
 import { getDb } from "@/lib/db";
-import { formatMoney, todayIso } from "@/lib/money";
+import { todayIso } from "@/lib/money";
 import { listAccounts } from "@/lib/queries";
 import { requireTenant } from "@/lib/tenant";
 
