@@ -18,7 +18,7 @@ Local development uses SQLite at `data/ledgerdesk.db` unless `DATABASE_URL` is s
 SQLite cannot persist on Vercel. Production uses Postgres.
 
 1. Set the Node.js version to **22.x** in the Vercel project.
-2. Add `DATABASE_URL` (Neon pooler connection string) for Production and Preview.
+2. Add a Neon database. Vercel Storage usually sets `POSTGRES_URL`; a manual URL can be `DATABASE_URL`. Apply it to Production and Preview, then redeploy.
 3. Add `LEDGERDESK_PASSWORD` and `AUTH_SECRET` so the public site is locked.
 4. Redeploy. Sign in with the workspace password, then confirm a journal entry still exists after refresh.
 
