@@ -34,16 +34,30 @@ export async function setupAccount(form: FormData) {
       await hashPassword(password),
     );
     const uid = Number(user.lastInsertRowid);
-    const biz = await tx.run(
-      "INSERT INTO businesses (name, currency, fiscal_year_start, modules_json) VALUES (?, 'USD', '01-01', ?)",
-      businessName,
-      JSON.stringify(DEFAULT_MODULES),
-    );
-    const bid = Number(biz.lastInsertRowid);
+    const existingBiz = await tx.get<{ id: number }>("SELECT id FROM businesses ORDER BY id LIMIT 1");
+    let bid: number;
+    if (existingBiz) {
+      bid = existingBiz.id;
+      await tx.run(
+        "UPDATE businesses SET name = ?, modules_json = ? WHERE id = ?",
+        businessName,
+        JSON.stringify(DEFAULT_MODULES),
+        bid,
+      );
+    } else {
+      const biz = await tx.run(
+        "INSERT INTO businesses (name, currency, fiscal_year_start, modules_json) VALUES (?, 'USD', '01-01', ?)",
+        businessName,
+        JSON.stringify(DEFAULT_MODULES),
+      );
+      bid = Number(biz.lastInsertRowid);
+    }
     await tx.run("INSERT INTO memberships (user_id, business_id, role) VALUES (?, ?, 'owner')", uid, bid);
     await seedBusinessBooks(tx, bid);
-    await tx.run("INSERT INTO locations (business_id, name) VALUES (?, ?)", bid, "Main warehouse");
-    await tx.run("INSERT INTO divisions (business_id, name, code) VALUES (?, ?, ?)", bid, "General", "GEN");
+    const loc = await tx.get<{ id: number }>("SELECT id FROM locations WHERE business_id = ?", bid);
+    if (!loc) await tx.run("INSERT INTO locations (business_id, name) VALUES (?, ?)", bid, "Main warehouse");
+    const div = await tx.get<{ id: number }>("SELECT id FROM divisions WHERE business_id = ?", bid);
+    if (!div) await tx.run("INSERT INTO divisions (business_id, name, code) VALUES (?, ?, ?)", bid, "General", "GEN");
     return uid;
   });
   const membership = await db.get<{ business_id: number }>(

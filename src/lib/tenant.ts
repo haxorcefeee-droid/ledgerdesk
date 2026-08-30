@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE, verifySessionToken } from "./auth";
 import { getDb } from "./db";
 import { DEFAULT_MODULES, type ModuleKey, type Role } from "./modules";
-import { asPlain } from "./plain";
+import { asPlain, asPlainList } from "./plain";
 
 export type CurrentUser = {
   id: number;
@@ -83,7 +83,7 @@ export async function optionalTenant(): Promise<Tenant | null> {
     user: asPlain(user),
     business: asPlain({ ...row, modules }),
     role: preferred.role,
-    businesses: memberships,
+    businesses: asPlainList(memberships),
   };
 }
 

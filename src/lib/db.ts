@@ -230,11 +230,11 @@ async function migrateSqlite(db: DbClient) {
     );
     CREATE TABLE IF NOT EXISTS accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      code TEXT NOT NULL UNIQUE,
+      code TEXT NOT NULL,
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK (${ACCOUNT_TYPE_CHECK}),
       is_system INTEGER NOT NULL DEFAULT 0,
-      system_key TEXT UNIQUE,
+      system_key TEXT,
       archived INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS cash_accounts (
@@ -269,7 +269,7 @@ async function migrateSqlite(db: DbClient) {
     );
     CREATE TABLE IF NOT EXISTS invoices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      number TEXT NOT NULL UNIQUE,
+      number TEXT NOT NULL,
       customer_id INTEGER NOT NULL REFERENCES customers(id),
       date TEXT NOT NULL,
       due_date TEXT,
@@ -311,11 +311,11 @@ async function migratePostgres(db: DbClient) {
     )`,
     `CREATE TABLE IF NOT EXISTS accounts (
       id ${identity},
-      code TEXT NOT NULL UNIQUE,
+      code TEXT NOT NULL,
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK (${ACCOUNT_TYPE_CHECK}),
       is_system INTEGER NOT NULL DEFAULT 0,
-      system_key TEXT UNIQUE,
+      system_key TEXT,
       archived INTEGER NOT NULL DEFAULT 0
     )`,
     `CREATE TABLE IF NOT EXISTS cash_accounts (
@@ -350,7 +350,7 @@ async function migratePostgres(db: DbClient) {
     )`,
     `CREATE TABLE IF NOT EXISTS invoices (
       id ${identity},
-      number TEXT NOT NULL UNIQUE,
+      number TEXT NOT NULL,
       customer_id INTEGER NOT NULL REFERENCES customers(id),
       date TEXT NOT NULL,
       due_date TEXT,

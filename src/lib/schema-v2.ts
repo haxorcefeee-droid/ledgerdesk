@@ -372,6 +372,23 @@ export async function migrateV2(db: Db, dialect: "sqlite" | "postgres") {
   await db.exec("UPDATE customers SET business_id = 1 WHERE business_id IS NULL");
   await db.exec("UPDATE invoices SET business_id = 1 WHERE business_id IS NULL");
 
+  const relax = [
+    "ALTER TABLE accounts DROP CONSTRAINT IF EXISTS accounts_code_key",
+    "ALTER TABLE accounts DROP CONSTRAINT IF EXISTS accounts_system_key_key",
+    "ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_number_key",
+    "DROP INDEX IF EXISTS accounts_code_key",
+    "DROP INDEX IF EXISTS accounts_system_key_key",
+    "CREATE UNIQUE INDEX IF NOT EXISTS accounts_biz_code ON accounts (business_id, code)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS invoices_biz_number ON invoices (business_id, number)",
+  ];
+  for (const statement of relax) {
+    try {
+      await db.exec(statement);
+    } catch {
+      // sqlite or already applied
+    }
+  }
+
   const businesses = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM businesses");
   const legacy = await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM business");
   if ((businesses?.n ?? 0) === 0 && (legacy?.n ?? 0) > 0) {
