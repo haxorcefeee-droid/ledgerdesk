@@ -1,30 +1,36 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f4f1ea;
-  --ink: #1c1917;
-  --muted: #57534e;
-  --line: #d6d3d1;
-  --panel: #fffcf7;
+  --bg: #f5f5f4;
+  --ink: #111827;
+  --muted: #6b7280;
+  --line: #e7e5e4;
+  --panel: #ffffff;
+  --panel-soft: #fafaf9;
   --accent: #0f766e;
-  --accent-ink: #f0fdfa;
+  --accent-soft: rgba(20, 184, 166, 0.12);
+  --accent-ink: #ecfeff;
   --danger: #b91c1c;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 24px rgba(15, 23, 42, 0.04);
 }
 
 html.dark {
-  --bg: #1c1917;
-  --ink: #f5f5f4;
-  --muted: #a8a29e;
-  --line: #44403c;
-  --panel: #292524;
+  --bg: #0f172a;
+  --ink: #e2e8f0;
+  --muted: #94a3b8;
+  --line: #334155;
+  --panel: #111827;
+  --panel-soft: #0f172a;
   --accent: #5eead4;
-  --accent-ink: #042f2e;
+  --accent-soft: rgba(94, 234, 212, 0.12);
+  --accent-ink: #062a2d;
   --danger: #fda4af;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.35), 0 18px 40px rgba(2, 6, 23, 0.45);
 }
 
 html,
 body {
-  background: var(--bg);
+  background: radial-gradient(circle at top, rgba(15, 118, 110, 0.08), transparent 28%), var(--bg);
   color: var(--ink);
 }
 
@@ -41,6 +47,12 @@ select,
 textarea,
 button {
   font-family: inherit;
+}
+
+input,
+select,
+textarea {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 @media print {

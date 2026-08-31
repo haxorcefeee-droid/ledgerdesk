@@ -19,7 +19,7 @@ export function ButtonLink({ href, children }: { href: string; children: React.R
   return (
     <Link
       href={href}
-      className="sans rounded-md bg-teal-800 px-4 py-2 text-sm text-[var(--accent-ink)] hover:bg-teal-900"
+      className="sans inline-flex items-center justify-center rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-ink)] shadow-sm transition hover:-translate-y-0.5 hover:bg-teal-700 focus:outline-none focus:ring-4 focus:ring-[var(--accent-soft)]"
     >
       {children}
     </Link>
@@ -30,7 +30,7 @@ export function PrimaryButton({ children }: { children: React.ReactNode }) {
   return (
     <button
       type="submit"
-      className="sans rounded-md bg-teal-800 px-4 py-2 text-sm text-[var(--accent-ink)] hover:bg-teal-900"
+      className="sans inline-flex items-center justify-center rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-ink)] shadow-sm transition hover:-translate-y-0.5 hover:bg-teal-700 focus:outline-none focus:ring-4 focus:ring-[var(--accent-soft)]"
     >
       {children}
     </button>
@@ -53,7 +53,7 @@ export function Field({
 }
 
 export const inputClass =
-  "w-full rounded-md border border-[var(--line)] bg-white px-3 py-2 sans text-sm outline-none focus:border-teal-700 dark:bg-stone-900 dark:text-[var(--ink)]";
+  "w-full rounded-xl border border-[var(--line)] bg-[var(--panel)] px-3 py-2.5 sans text-sm text-[var(--ink)] shadow-sm outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)] disabled:cursor-not-allowed disabled:opacity-50";
 
 export function DataTable({
   headers,
@@ -63,9 +63,9 @@ export function DataTable({
   children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-[var(--line)] bg-[var(--panel)]">
+    <div className="overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-[var(--shadow)]">
       <table className="w-full text-left text-sm">
-        <thead className="sans border-b border-[var(--line)] text-[var(--muted)]">
+        <thead className="sans border-b border-[var(--line)] bg-[var(--panel-soft)] text-[var(--muted)]">
           <tr>
             {headers.map((h) => (
               <th key={h} className="px-4 py-3 font-medium">
