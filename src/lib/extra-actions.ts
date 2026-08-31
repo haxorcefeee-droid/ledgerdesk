@@ -8,6 +8,7 @@ import { parseMoney } from "./money";
 import { hashPassword, randomHex } from "./passwords";
 import { requireTenant } from "./tenant";
 import type { Role } from "./modules";
+import { assertBusinessScopedIds, assertBusinessScopedRows } from "./business-scope";
 
 function s(form: FormData, key: string): string {
   return String(form.get(key) ?? "").trim();
@@ -168,6 +169,15 @@ export async function createDocument(form: FormData) {
   const tenant = await requireTenant();
   const kind = s(form, "kind");
   const db = await getDb();
+  const partyId = n(form, "party_id") || null;
+  if (partyId) {
+    const party = await db.get<{ id: number; business_id: number }>(
+      "SELECT id, business_id FROM parties WHERE id = ?",
+      partyId,
+    );
+    if (!party) throw new Error("Customer or supplier not found.");
+    assertBusinessScopedRows(tenant.business.id, [party], "party");
+  }
   const count = await db.get<{ n: number }>(
     "SELECT COUNT(*) AS n FROM documents WHERE business_id = ? AND kind = ?",
     tenant.business.id,
@@ -181,7 +191,7 @@ export async function createDocument(form: FormData) {
     tenant.business.id,
     kind,
     number,
-    n(form, "party_id") || null,
+    partyId,
     s(form, "date"),
     s(form, "due_date") || null,
     s(form, "currency") || tenant.business.currency,
@@ -194,7 +204,17 @@ export async function createDocument(form: FormData) {
   const descs = form.getAll("line_description").map(String);
   const qtys = form.getAll("line_qty").map(String);
   const units = form.getAll("line_unit").map(String);
-  const accounts = form.getAll("line_account_id").map(Number);
+  const accounts = form.getAll("line_account_id").map(Number).filter((id) => Number.isFinite(id) && id > 0);
+  const accountRows = accounts.length
+    ? await db.all<{ id: number; business_id: number }>(
+        "SELECT id, business_id FROM accounts WHERE id IN (" + accounts.map(() => "?").join(", ") + ")",
+        ...accounts,
+      )
+    : [];
+  assertBusinessScopedIds(tenant.business.id, accountRows, "document account");
+  if (accountRows.length !== accounts.length) {
+    throw new Error("One or more document accounts are invalid for this business.");
+  }
   for (let i = 0; i < descs.length; i++) {
     if (!descs[i].trim()) continue;
     await db.run(
@@ -228,6 +248,17 @@ export async function postDocument(form: FormData) {
     "SELECT account_id, qty, unit_cents FROM document_lines WHERE document_id = ?",
     id,
   );
+  const accountIds = lines.map((line) => line.account_id).filter((id) => Number.isFinite(id) && id > 0);
+  if (accountIds.length > 0) {
+    const accountRows = await db.all<{ id: number; business_id: number }>(
+      "SELECT id, business_id FROM accounts WHERE id IN (" + accountIds.map(() => "?").join(", ") + ")",
+      ...accountIds,
+    );
+    assertBusinessScopedIds(tenant.business.id, accountRows, "document account");
+    if (accountRows.length !== accountIds.length) {
+      throw new Error("One or more document accounts are invalid for this business.");
+    }
+  }
   const total = lines.reduce((sum, line) => sum + Math.round(line.qty * line.unit_cents), 0);
   await db.run("UPDATE documents SET total = ? WHERE id = ?", total, id);
   const sales = ["quote", "order", "invoice", "credit", "delivery"].includes(doc.kind);
@@ -322,9 +353,17 @@ export async function recordTransfer(form: FormData) {
   const toId = n(form, "to_id");
   const amount = parseMoney(s(form, "amount"));
   const db = await getDb();
-  const from = await db.get<{ account_id: number }>("SELECT account_id FROM cash_accounts WHERE id = ?", fromId);
-  const to = await db.get<{ account_id: number }>("SELECT account_id FROM cash_accounts WHERE id = ?", toId);
-  if (!from || !to) throw new Error("Cash accounts not found.");
+  const from = await db.get<{ account_id: number }>(
+    "SELECT account_id FROM cash_accounts WHERE id = ? AND business_id = ?",
+    fromId,
+    tenant.business.id,
+  );
+  const to = await db.get<{ account_id: number }>(
+    "SELECT account_id FROM cash_accounts WHERE id = ? AND business_id = ?",
+    toId,
+    tenant.business.id,
+  );
+  if (!from || !to) throw new Error("Cash accounts not found in this business.");
   const entryId = await postJournal({
     businessId: tenant.business.id,
     date: s(form, "date"),
@@ -352,10 +391,17 @@ export async function recordTransfer(form: FormData) {
 export async function addStatementLine(form: FormData) {
   const tenant = await requireTenant();
   const db = await getDb();
+  const cashAccountId = n(form, "cash_account_id");
+  const cash = await db.get<{ id: number }>(
+    "SELECT id FROM cash_accounts WHERE id = ? AND business_id = ?",
+    cashAccountId,
+    tenant.business.id,
+  );
+  if (!cash) throw new Error("Cash account not found in this business.");
   await db.run(
     "INSERT INTO bank_statement_lines (business_id, cash_account_id, date, amount_cents, description) VALUES (?, ?, ?, ?, ?)",
     tenant.business.id,
-    n(form, "cash_account_id"),
+    cashAccountId,
     s(form, "date"),
     parseMoney(s(form, "amount")),
     s(form, "description"),
@@ -376,11 +422,18 @@ export async function matchStatement(form: FormData) {
 export async function createBankRule(form: FormData) {
   const tenant = await requireTenant();
   const db = await getDb();
+  const accountId = n(form, "account_id");
+  const account = await db.get<{ id: number }>(
+    "SELECT id FROM accounts WHERE id = ? AND business_id = ?",
+    accountId,
+    tenant.business.id,
+  );
+  if (!account) throw new Error("Account not found in this business.");
   await db.run(
     "INSERT INTO bank_rules (business_id, pattern, account_id, kind) VALUES (?, ?, ?, ?)",
     tenant.business.id,
     s(form, "pattern"),
-    n(form, "account_id"),
+    accountId,
     s(form, "kind") || "contains",
   );
   redirect("/cash/rules");
@@ -392,8 +445,12 @@ export async function createClaim(form: FormData) {
   const expenseId = n(form, "account_id");
   const cashId = n(form, "cash_account_id");
   const db = await getDb();
-  const cash = await db.get<{ account_id: number }>("SELECT account_id FROM cash_accounts WHERE id = ?", cashId);
-  if (!cash) throw new Error("Cash account required.");
+  const cash = await db.get<{ account_id: number }>(
+    "SELECT account_id FROM cash_accounts WHERE id = ? AND business_id = ?",
+    cashId,
+    tenant.business.id,
+  );
+  if (!cash) throw new Error("Cash account required for this business.");
   const entryId = await postJournal({
     businessId: tenant.business.id,
     date: s(form, "date"),
@@ -998,8 +1055,9 @@ export async function applyBankRules() {
     );
     if (!rule) continue;
     const cash = await db.get<{ account_id: number }>(
-      "SELECT account_id FROM cash_accounts WHERE id = ?",
+      "SELECT account_id FROM cash_accounts WHERE id = ? AND business_id = ?",
       line.cash_account_id,
+      tenant.business.id,
     );
     if (!cash) continue;
     const inflow = line.amount_cents >= 0;

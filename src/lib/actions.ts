@@ -9,6 +9,7 @@ import { getInvoice, nextInvoiceNumber } from "./queries";
 import { requireTenant } from "./tenant";
 import { ACCOUNT_TYPES, DEFAULT_MODULES, type AccountType } from "./types";
 import { DEFAULT_MODULES as FULL_MODULES, type ModuleKey } from "./modules";
+import { assertBusinessScopedIds, assertBusinessScopedRows } from "./business-scope";
 
 function formString(form: FormData, key: string): string {
   return String(form.get(key) ?? "").trim();
@@ -132,10 +133,17 @@ export async function recordCashMove(form: FormData) {
   if (amount <= 0) throw new Error("Amount must be greater than zero.");
   const db = await getDb();
   const cash = await db.get<{ account_id: number }>(
-    "SELECT account_id FROM cash_accounts WHERE id = ?",
+    "SELECT account_id FROM cash_accounts WHERE id = ? AND business_id = ?",
     cashAccountId,
+    tenant.business.id,
   );
-  if (!cash) throw new Error("Cash account not found.");
+  if (!cash) throw new Error("Cash account not found for this business.");
+  const offset = await db.get<{ id: number; business_id: number }>(
+    "SELECT id, business_id FROM accounts WHERE id = ?",
+    offsetAccountId,
+  );
+  if (!offset) throw new Error("Offset account not found.");
+  assertBusinessScopedRows(tenant.business.id, [offset], "offset account");
   const journal = {
     businessId: tenant.business.id,
     date,
@@ -201,8 +209,23 @@ export async function createInvoice(form: FormData) {
   const descriptions = form.getAll("line_description").map(String);
   const qtys = form.getAll("line_qty").map(String);
   const units = form.getAll("line_unit").map(String);
-  const incomeIds = form.getAll("line_income_id").map((v) => Number(v));
+  const incomeIds = form.getAll("line_income_id").map((v) => Number(v)).filter((id) => Number.isFinite(id) && id > 0);
+  if (incomeIds.length === 0) throw new Error("Add at least one invoice line.");
   const db = await getDb();
+  const customer = await db.get<{ id: number; business_id: number }>(
+    "SELECT id, business_id FROM customers WHERE id = ?",
+    customerId,
+  );
+  if (!customer) throw new Error("Customer not found.");
+  assertBusinessScopedRows(tenant.business.id, [customer], "customer");
+  const incomeRows = await db.all<{ id: number; business_id: number }>(
+    "SELECT id, business_id FROM accounts WHERE id IN (" + incomeIds.map(() => "?").join(", ") + ")",
+    ...incomeIds,
+  );
+  assertBusinessScopedIds(tenant.business.id, incomeRows, "invoice income account");
+  if (incomeRows.length !== incomeIds.filter(Boolean).length) {
+    throw new Error("One or more income accounts are invalid.");
+  }
   const number = await nextInvoiceNumber();
   const invoiceId = await db.transaction(async (tx) => {
     const result = await tx.run(
@@ -239,6 +262,16 @@ export async function postInvoice(invoiceId: number) {
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.status === "posted") return;
   if (invoice.lines.length === 0) throw new Error("Add at least one line before posting.");
+  const accountIds = invoice.lines.map((line) => line.income_account_id).filter((id) => Number.isFinite(id) && id > 0);
+  if (accountIds.length === 0) throw new Error("One or more income accounts are invalid for this business.");
+  const accountRows = await (await getDb()).all<{ id: number; business_id: number }>(
+    "SELECT id, business_id FROM accounts WHERE id IN (" + accountIds.map(() => "?").join(", ") + ")",
+    ...accountIds,
+  );
+  assertBusinessScopedIds(tenant.business.id, accountRows, "invoice income account");
+  if (accountRows.length !== accountIds.length) {
+    throw new Error("One or more income accounts are invalid for this business.");
+  }
   const arId = await systemAccountId(tenant.business.id, "accounts_receivable");
   const byIncome = new Map<number, number>();
   for (const line of invoice.lines) {
@@ -282,11 +315,14 @@ export async function recordInvoicePayment(form: FormData) {
   if (amount > invoice.balanceCents) throw new Error("Payment cannot exceed the remaining balance.");
   const db = await getDb();
   const cash = await db.get<{ account_id: number }>(
-    "SELECT account_id FROM cash_accounts WHERE id = ?",
+    "SELECT account_id FROM cash_accounts WHERE id = ? AND business_id = ?",
     cashAccountId,
+    tenant.business.id,
   );
-  if (!cash) throw new Error("Cash account not found.");
+  if (!cash) throw new Error("Cash account not found for this business.");
   const arId = await systemAccountId(tenant.business.id, "accounts_receivable");
+  const offsetAccount = await db.get<{ id: number; business_id: number }>("SELECT id, business_id FROM accounts WHERE id = ?", arId);
+  assertBusinessScopedRows(tenant.business.id, [offsetAccount!], "accounts receivable");
   const entryId = await postJournal({
     businessId: tenant.business.id,
     date,

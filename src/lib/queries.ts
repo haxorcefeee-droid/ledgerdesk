@@ -118,13 +118,14 @@ export async function listJournalEntries() {
 
 export async function getJournalEntry(id: number) {
   const db = await getDb();
+  const businessId = await bizId();
   const entry = await db.get<{
     id: number;
     date: string;
     memo: string;
     source_type: string;
     source_id: number | null;
-  }>("SELECT * FROM journal_entries WHERE id = ?", id);
+  }>("SELECT * FROM journal_entries WHERE id = ? AND business_id = ?", id, businessId);
   if (!entry) return null;
   const lines = await db.all<{
     id: number;
